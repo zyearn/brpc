@@ -26,6 +26,7 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "brpc/policy/discovery_naming_service.h"
+#include "butil/string_splitter.h"
 
 namespace brpc {
 namespace policy {
@@ -97,7 +98,9 @@ static int ListDiscoveryNodes(const char* discovery_api_addr, std::string* serve
                 itr_status->value.GetUint() != 0) {
             continue;
         }
-        servers->push_back(',');
+        if (i != 0) {
+            servers->push_back(',');
+        }
         servers->append(itr_addr->value.GetString(),
                         itr_addr->value.GetStringLength());
     }
@@ -334,13 +337,23 @@ int DiscoveryClient::DoCancel() const {
 
 // ========== DiscoveryNamingService =============
 
-int DiscoveryNamingService::GetServers(const char* service_name,
+int DiscoveryNamingService::GetServers(const char* service_name_with_protocol,
                                        std::vector<ServerNode>* servers) {
-    if (service_name == NULL || *service_name == '\0' ||
+    if (service_name_with_protocol == NULL || *service_name_with_protocol == '\0' ||
         FLAGS_discovery_env.empty() ||
         FLAGS_discovery_status.empty()) {
         LOG_ONCE(ERROR) << "Invalid parameters";
         return -1;
+    }
+    butil::StringSplitter sp(service_name_with_protocol, ':');
+    char service_name[128];
+    memcpy(service_name, sp.field(), sp.length());
+    service_name[sp.length()] = '\0';
+    sp++;
+    char protocol[16] = "grpc";
+    if (sp) {
+        memcpy(protocol, sp.field(), sp.length());
+        protocol[sp.length()] = '\0';
     }
     Channel* chan = GetOrNewDiscoveryChannel();
     if (NULL == chan) {
@@ -413,14 +426,11 @@ int DiscoveryNamingService::GetServers(const char* service_name,
             if (!addrs[j].IsString()) {
                 continue;
             }
-            // The result returned by discovery include protocol prefix, such as
-            // http://172.22.35.68:6686, which should be removed.
             butil::StringPiece addr(addrs[j].GetString(), addrs[j].GetStringLength());
             butil::StringPiece::size_type pos = addr.find("://");
             if (pos != butil::StringPiece::npos) {
-                if (pos != 4 /* sizeof("grpc") */ ||
-                        strncmp("grpc", addr.data(), 4) != 0) {
-                    // Skip server that has prefix but not start with "grpc"
+                if (pos != strlen(protocol) || strncmp(protocol, addr.data(), pos) != 0) {
+                    // Skip server that has prefix but not start with `protocol'
                     continue;
                 }
                 addr.remove_prefix(pos + 3);

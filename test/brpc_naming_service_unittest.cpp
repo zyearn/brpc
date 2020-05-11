@@ -515,14 +515,6 @@ static std::string s_nodes_result = R"({
             "addr": "127.0.0.1:8635",
             "status": 0,
             "zone": ""
-        }, {
-            "addr": "172.18.33.51:7171",
-            "status": 0,
-            "zone": ""
-        }, {
-            "addr": "172.18.33.52:7171",
-            "status": 0,
-            "zone": ""
         }
     ]
 })";
@@ -617,10 +609,30 @@ TEST(NamingServiceTest, discovery_sanity) {
                 rest_mapping.c_str()));
     ASSERT_EQ(0, server.Start("localhost:8635", NULL));
 
-    brpc::policy::DiscoveryNamingService dcns;
-    std::vector<brpc::ServerNode> servers;
-    ASSERT_EQ(0, dcns.GetServers("admin.test", &servers));
-    ASSERT_EQ((size_t)1, servers.size());
+    {
+        brpc::policy::DiscoveryNamingService dcns;
+        std::vector<brpc::ServerNode> servers;
+        ASSERT_EQ(0, dcns.GetServers("admin.test", &servers));
+        ASSERT_EQ((size_t)1, servers.size());
+        butil::EndPointStr ep = butil::endpoint2str(servers[0].addr);
+        ASSERT_EQ(0, strcmp("127.0.1.1:9000", ep.c_str()));
+    }
+    {
+        brpc::policy::DiscoveryNamingService dcns;
+        std::vector<brpc::ServerNode> servers;
+        ASSERT_EQ(0, dcns.GetServers("admin.test:grpc", &servers));
+        ASSERT_EQ((size_t)1, servers.size());
+        butil::EndPointStr ep = butil::endpoint2str(servers[0].addr);
+        ASSERT_EQ(0, strcmp("127.0.1.1:9000", ep.c_str()));
+    }
+    {
+        brpc::policy::DiscoveryNamingService dcns;
+        std::vector<brpc::ServerNode> servers;
+        ASSERT_EQ(0, dcns.GetServers("admin.test:http", &servers));
+        ASSERT_EQ((size_t)1, servers.size());
+        butil::EndPointStr ep = butil::endpoint2str(servers[0].addr);
+        ASSERT_EQ(0, strcmp("127.0.0.1:8999", ep.c_str()));
+    }
 
     brpc::policy::DiscoveryRegisterParam dparam;
     dparam.appid = "main.test";
